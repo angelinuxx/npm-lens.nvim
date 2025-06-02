@@ -1,14 +1,15 @@
 local M = {}
 
--- TODO: make this configurable
-local init_highlight = function()
-	vim.api.nvim_set_hl(0, "NpmLensLatest", { link = "DiagnosticUnnecessary" })
-	vim.api.nvim_set_hl(0, "NpmLensOutdatedMinor", { link = "DiagnosticVirtualTextWarn" })
-	vim.api.nvim_set_hl(0, "NpmLensOutdated", { link = "DiagnosticVirtualTextError" })
-	vim.api.nvim_set_hl(0, "NpmLensAvailable", { link = "DiagnosticVirtualTextInfo" })
-end
+---@class nvim_lens.State
+---@field deps nvim_lens.Dependency[]: The list of dependencies
+---@field show boolean: Whether the virtual text is shown
+local state = {
+	deps = {},
+	show = true,
+}
 
 local defaults = {
+	prefetch = true,
 	status = {
 		latest = { icon = "󰄲" },
 		outdated = { icon = "󰀧" },
@@ -29,6 +30,14 @@ local defaults = {
 
 ---@type nvim_lens.Options
 local options = vim.tbl_deep_extend("force", defaults, {})
+
+-- TODO: make this configurable
+local init_highlight = function()
+	vim.api.nvim_set_hl(0, "NpmLensLatest", { link = "DiagnosticUnnecessary" })
+	vim.api.nvim_set_hl(0, "NpmLensOutdatedMinor", { link = "DiagnosticVirtualTextWarn" })
+	vim.api.nvim_set_hl(0, "NpmLensOutdated", { link = "DiagnosticVirtualTextError" })
+	vim.api.nvim_set_hl(0, "NpmLensAvailable", { link = "DiagnosticVirtualTextInfo" })
+end
 init_highlight()
 
 --- Plugin setup
@@ -102,7 +111,7 @@ local add_deps_info = function(deps)
 	return deps
 end
 
--- Function to add virtual text
+-- Adds dependency virtual text
 ---@param deps nvim_lens.Dependency[]
 local add_virtual_text = function(deps)
 	-- Create a namespace for the extmark
@@ -142,25 +151,62 @@ local add_virtual_text = function(deps)
 	end
 end
 
----
-M.toggle = function()
-	-- check if current curren file is package.json
-	-- TODO: in future i want to check in cwd and preload npm outdated info
+--- Remove dependency virtual text
+local remove_virtual_text = function()
+	local ns_id = vim.api.nvim_create_namespace("npm-lens.nvim")
+	local bufnr = vim.api.nvim_get_current_buf()
+	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+end
+
+local is_npm_file = function()
 	local filename = vim.fn.expand("%:t")
-	if filename ~= "package.json" then
-		vim.notify("Not a package.json file", vim.log.levels.WARN)
+	return filename == "package.json"
+end
+
+local refresh_virtual_text = function()
+	if state.show then
+		remove_virtual_text()
+		add_virtual_text(state.deps)
+	end
+end
+
+--- Load deps
+M._load_deps = function()
+	-- TODO: check if npm is installed
+
+	-- check if current curren file is package.json
+	if not is_npm_file() then
+		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
 		return
 	end
 
-	-- TODO: check if npm is installed
+	vim.notify("󱑢 Loading dependencies", vim.log.levels.INFO, { title = "NpmLens" })
+
 	-- parse package.json buffer using parse_buffer
-	local deps = parse_buffer(vim.api.nvim_get_current_buf())
+	local deps = parse_buffer(0)
+
 	-- add version infos to dependencies table using npm_outdated
 	deps = add_deps_info(deps)
+	state.deps = deps
 
-	add_virtual_text(deps)
+	refresh_virtual_text()
+end
 
-	return deps
+--- Toggle the virtual text
+M.toggle = function()
+	-- check if current curren file is package.json
+	if not is_npm_file() then
+		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
+		return
+	end
+
+	if state.show then
+		remove_virtual_text()
+		state.show = false
+	else
+		add_virtual_text(state.deps)
+		state.show = true
+	end
 end
 
 return M

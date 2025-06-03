@@ -1,27 +1,7 @@
 local M = {}
 
----@class nvim_lens.State
----@field deps nvim_lens.Dependency[]: The list of dependencies
----@field show boolean: Whether the virtual text is shown
----@field ns_id number: The namespace id for the virtual text
----@field bufnr number|nil: The buffer number
-local state = {
-	deps = {},
-	show = true,
-	ns_id = vim.api.nvim_create_namespace("npm-lens.nvim"),
-	bufnr = nil,
-}
-
-local defaults = {
-	prefetch = true,
-	status = {
-		latest = { icon = "󰄲" },
-		outdated = { icon = "󰀧" },
-		outdatedMinor = { icon = "󰍵" },
-	},
-}
-
 ---@class nvim_lens.Options
+---@field enable boolean: Whether the virtual text is enabled on startup
 ---@field status nvim_lens.Statuses: The statuses configuration for the plugin
 
 ---@class nvim_lens.Statuses
@@ -33,7 +13,29 @@ local defaults = {
 ---@field icon string?: The icon to show for this status
 
 ---@type nvim_lens.Options
+local defaults = {
+	enable = true,
+	status = {
+		latest = { icon = "󰄲" },
+		outdated = { icon = "󰀧" },
+		outdatedMinor = { icon = "󰍵" },
+	},
+}
+
+---@type nvim_lens.Options
 local options = vim.tbl_deep_extend("force", defaults, {})
+
+---@class nvim_lens.State
+---@field deps nvim_lens.Dependency[]: The list of dependencies
+---@field show boolean: Whether the virtual text is shown
+---@field ns_id number: The namespace id for the virtual text
+---@field bufnr number|nil: The buffer number
+local state = {
+	deps = {},
+	show = options.enable,
+	ns_id = vim.api.nvim_create_namespace("npm-lens.nvim"),
+	bufnr = nil,
+}
 
 -- TODO: make this configurable
 local init_highlight = function()
@@ -47,6 +49,7 @@ init_highlight()
 --- Plugin setup
 M.setup = function(opts)
 	options = vim.tbl_deep_extend("force", defaults, opts or {})
+	state.show = options.enable
 end
 
 ---@class nvim_lens.Dependency

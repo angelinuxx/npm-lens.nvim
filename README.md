@@ -32,10 +32,11 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
   'angelinuxx/npm-lens.nvim',
   -- Optional: these are the default options
   opts = {
+    enabled = true, -- If false, the info in `package.json` will not be displayed until `:NpmLensToggle` is called
     status = {
-      latest = { icon = "" },
-      outdated = { icon = "" },
-      outdatedMinor = { icon = "" },
+      latest = { icon = "󰄲" },
+      outdated = { icon = "󰀧" },
+      outdatedMinor = { icon = "󰍵" },
     },
   },
 }

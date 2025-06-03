@@ -171,8 +171,18 @@ local add_deps_info = function(deps)
 	end)
 end
 
---- Load deps
-M.init = function()
+local refresh_deps = function()
+	-- parse package.json buffer using parse_buffer
+	state.deps = parse_buffer(state.bufnr)
+	refresh_virtual_text(state.bufnr)
+
+	-- add version infos to dependencies table using npm_outdated
+	vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
+	add_deps_info(state.deps)
+end
+
+--- Init plugin state
+M._init = function()
 	-- TODO: check if npm is installed
 
 	-- check if current curren file is package.json
@@ -182,14 +192,7 @@ M.init = function()
 	end
 
 	state.bufnr = vim.api.nvim_get_current_buf()
-
-	-- parse package.json buffer using parse_buffer
-	state.deps = parse_buffer(state.bufnr)
-	refresh_virtual_text(state.bufnr)
-
-	-- add version infos to dependencies table using npm_outdated
-	vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
-	add_deps_info(state.deps)
+	refresh_deps()
 end
 
 --- Toggle the virtual text
@@ -207,6 +210,16 @@ M.toggle = function()
 		add_virtual_text(state.bufnr, state.deps)
 		state.show = true
 	end
+end
+
+--- Refresh deps info
+M.refresh = function()
+	-- check if current curren file is package.json
+	if not is_npm_file() then
+		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
+		return
+	end
+	refresh_deps()
 end
 
 return M

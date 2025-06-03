@@ -47,6 +47,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 ## 🚀 Usage
 
 Use the command `:NpmLensToggle` to toggle virtual text display in `package.json`.
+Use the command `:NpmLensRefresh` to trigger a refresh of the dependencies info.
 
 ---
 

@@ -4,7 +4,7 @@ vim.api.nvim_create_autocmd("BufReadPost", {
 	group = group,
 	pattern = "package.json",
 	callback = function()
-		require("npm-lens")._load_deps()
+		require("npm-lens").init()
 	end,
 })
 

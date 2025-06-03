@@ -3,9 +3,13 @@ local M = {}
 ---@class nvim_lens.State
 ---@field deps nvim_lens.Dependency[]: The list of dependencies
 ---@field show boolean: Whether the virtual text is shown
+---@field ns_id number: The namespace id for the virtual text
+---@field bufnr number|nil: The buffer number
 local state = {
 	deps = {},
 	show = true,
+	ns_id = vim.api.nvim_create_namespace("npm-lens.nvim"),
+	bufnr = nil,
 }
 
 local defaults = {
@@ -52,6 +56,60 @@ end
 ---@field wanted string|nil: The wanted version
 ---@field latest string|nil: The latest version
 
+-- Adds dependency virtual text
+---@param deps nvim_lens.Dependency[]
+local add_virtual_text = function(bufnr, deps)
+	-- Define the virtual text to display
+	for _, dep in ipairs(deps) do
+		local icon = options.status.latest.icon
+		local hl_group = "NpmLensLatest"
+		local available = "󰏕 "
+		local outdated = dep.latest ~= nil and dep.wanted ~= nil
+		if outdated then
+			available = available .. dep.wanted
+			if dep.wanted ~= dep.latest then
+				icon = options.status.outdated.icon
+				hl_group = "NpmLensOutdated"
+				available = available .. "  󰎔 " .. dep.latest
+			else
+				icon = options.status.outdatedMinor.icon
+				hl_group = "NpmLensOutdatedMinor"
+			end
+		end
+
+		local virt_text = {
+			-- { " ", "NpmLensLatest" },
+			{ icon .. " " .. dep.current, hl_group },
+		}
+		if outdated then
+			table.insert(virt_text, { "  ", "NpmLensLatest" })
+			table.insert(virt_text, { available, "NpmLensAvailable" })
+		end
+		-- Set the virtual text
+		vim.api.nvim_buf_set_extmark(bufnr, state.ns_id, dep.line_nr, 0, {
+			virt_text = virt_text,
+			hl_mode = "combine",
+		})
+	end
+end
+
+--- Remove dependency virtual text
+local remove_virtual_text = function(bufnr)
+	vim.api.nvim_buf_clear_namespace(bufnr, state.ns_id, 0, -1)
+end
+
+local is_npm_file = function()
+	local filename = vim.fn.expand("%:t")
+	return filename == "package.json"
+end
+
+local refresh_virtual_text = function(bufnr)
+	if state.show then
+		remove_virtual_text(bufnr)
+		add_virtual_text(bufnr, state.deps)
+	end
+end
+
 ---@param bfnr number
 ---@return nvim_lens.Dependency[]: The list of dependencies
 local parse_buffer = function(bfnr)
@@ -89,89 +147,32 @@ local parse_buffer = function(bfnr)
 
 	return deps
 end
-
 --- Takes a list of dependencies and add all the version infos (current, wanted, latest)
 ---@param deps nvim_lens.Dependency[]
----@return nvim_lens.Dependency[]
 local add_deps_info = function(deps)
 	-- exec `npm outdated --json`
-	local outdated = vim.fn.system("npm outdated --json")
-	outdated = vim.json.decode(outdated)
+	vim.system({ "npm", "outdated", "--json" }, { text = true }, function(outdated)
+		-- add a sleep for debugging
+		outdated = vim.json.decode(outdated.stdout)
 
-	-- reconcile outdated with deps
-	for _, dep in ipairs(deps) do
-		local outdated_dep = outdated[dep.name]
-		if outdated_dep then
-			dep.current = outdated_dep.current
-			dep.wanted = outdated_dep.wanted
-			dep.latest = outdated_dep.latest
-		end
-	end
-
-	return deps
-end
-
--- Adds dependency virtual text
----@param deps nvim_lens.Dependency[]
-local add_virtual_text = function(deps)
-	-- Create a namespace for the extmark
-	local ns_id = vim.api.nvim_create_namespace("npm-lens.nvim")
-	local bufnr = vim.api.nvim_get_current_buf()
-	-- Define the virtual text to display
-	for _, dep in ipairs(deps) do
-		local icon = options.status.latest.icon
-		local hl_group = "NpmLensLatest"
-		local available = "󰏕 "
-		local outdated = dep.latest ~= nil and dep.wanted ~= nil
-		if outdated then
-			available = available .. dep.wanted
-			if dep.wanted ~= dep.latest then
-				icon = options.status.outdated.icon
-				hl_group = "NpmLensOutdated"
-				available = available .. "  󰎔 " .. dep.latest
-			else
-				icon = options.status.outdatedMinor.icon
-				hl_group = "NpmLensOutdatedMinor"
+		-- reconcile outdated with deps
+		for _, dep in ipairs(deps) do
+			local outdated_dep = outdated[dep.name]
+			if outdated_dep then
+				dep.current = outdated_dep.current
+				dep.wanted = outdated_dep.wanted
+				dep.latest = outdated_dep.latest
 			end
 		end
-
-		local virt_text = {
-			-- { " ", "NpmLensLatest" },
-			{ icon .. " " .. dep.current, hl_group },
-		}
-		if outdated then
-			table.insert(virt_text, { "  ", "NpmLensLatest" })
-			table.insert(virt_text, { available, "NpmLensAvailable" })
-		end
-		-- Set the virtual text
-		vim.api.nvim_buf_set_extmark(bufnr, ns_id, dep.line_nr, 0, {
-			virt_text = virt_text,
-			hl_mode = "combine",
-		})
-	end
-end
-
---- Remove dependency virtual text
-local remove_virtual_text = function()
-	local ns_id = vim.api.nvim_create_namespace("npm-lens.nvim")
-	local bufnr = vim.api.nvim_get_current_buf()
-	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-end
-
-local is_npm_file = function()
-	local filename = vim.fn.expand("%:t")
-	return filename == "package.json"
-end
-
-local refresh_virtual_text = function()
-	if state.show then
-		remove_virtual_text()
-		add_virtual_text(state.deps)
-	end
+		state.deps = deps
+		vim.schedule(function()
+			refresh_virtual_text(state.bufnr)
+		end)
+	end)
 end
 
 --- Load deps
-M._load_deps = function()
+M.init = function()
 	-- TODO: check if npm is installed
 
 	-- check if current curren file is package.json
@@ -180,16 +181,15 @@ M._load_deps = function()
 		return
 	end
 
-	vim.notify("󱑢 Loading dependencies", vim.log.levels.INFO, { title = "NpmLens" })
+	state.bufnr = vim.api.nvim_get_current_buf()
 
 	-- parse package.json buffer using parse_buffer
-	local deps = parse_buffer(0)
+	state.deps = parse_buffer(state.bufnr)
+	refresh_virtual_text(state.bufnr)
 
 	-- add version infos to dependencies table using npm_outdated
-	deps = add_deps_info(deps)
-	state.deps = deps
-
-	refresh_virtual_text()
+	vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
+	add_deps_info(state.deps)
 end
 
 --- Toggle the virtual text
@@ -201,10 +201,10 @@ M.toggle = function()
 	end
 
 	if state.show then
-		remove_virtual_text()
+		remove_virtual_text(state.bufnr)
 		state.show = false
 	else
-		add_virtual_text(state.deps)
+		add_virtual_text(state.bufnr, state.deps)
 		state.show = true
 	end
 end

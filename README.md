@@ -68,7 +68,12 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 }
 ```
 
-> ℹ️ You can pass any valid parameter from `vim.api.keyset.highlight` to the `hl` field.
+> ℹ️ You can pass any valid parameter from `vim.api.keyset.highlight` to the
+> `hl` field.
+
+The plugin loads packages information when opening a `package.json` file.
+But if you lazy load it (e.g. defining keys in lazy.nvim config), the
+information will not be loaded until an available command is used.
 
 ---
 

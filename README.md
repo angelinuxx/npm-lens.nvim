@@ -21,11 +21,13 @@ Displays version info as virtual text next to each dependency:
 - **Wanted**: The latest version that satisfies the semver range in `package.json`.
 - **Latest**: The absolute latest version available on the npm registry.
 
-The highlight of current changes based on the version state, by default as follows:
+The highlight of **Current** is based on the version state, by default as follows:
 
-- `uptodate`: muted text and 󰄲 icon. The highlight group is linked to `DiagnosticUnnecessary`.
-- `wantedAvailable`: warning text and 󰍵 icon. The highlight group is linked to `DiagnosticVirtualTextWarn`.
-- `newerAvailable`: error text and 󰀧 icon. The highlight group is linked to `DiagnosticVirtualTextError`
+- `uptodate`: muted text and 󰄲 icon as label. The highlight group is linked to `DiagnosticUnnecessary`.
+- `wantedAvailable`: warning text and 󰍵 icon as label. The highlight group is
+  linked to `DiagnosticVirtualTextWarn`.
+- `newerAvailable`: error text and 󰀧 icon as label. The highlight group is
+  linked to `DiagnosticVirtualTextError`
 
 ---
 
@@ -40,19 +42,30 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
   opts = {
     enabled = true, -- If false, the info in `package.json` will not be displayed until `:NpmLensToggle` is called
     status = {
-      uptodate = { icon = "󰄲" },
-      wantedAvailable = { icon = "󰍵" },
-      newerAvailable = { icon = "󰀧" },
+      uptodate = {
+        label = "󰄲",
+        hl = { link = "DiagnosticUnnecessary" }
+      },
+      wantedAvailable = {
+        label = "󰍵",
+        hl = { link = "DiagnosticVirtualTextWarn" }
+      },
+      newerAvailable = {
+        label = "󰀧",
+        hl = { link = "DiagnosticVirtualTextError" }
+      },
     },
   },
 }
 ```
 
+> ℹ️ You can pass any valid parameter from `vim.api.keyset.highlight` to the `hl` field.
+
 ---
 
 ## 🚀 Usage
 
-Use the command `:NpmLensToggle` to toggle virtual text display in `package.json`.
+Use the command `:NpmLensToggle` to toggle virtual text display in `package.json`.  
 Use the command `:NpmLensRefresh` to trigger a refresh of the dependencies info.
 
 ---
@@ -66,7 +79,8 @@ Use the command `:NpmLensRefresh` to trigger a refresh of the dependencies info.
 
 #### 🧭 Roadmap
 
-- [ ] Configurable highlight groups for each version state
+- [x] Configurable highlight groups for each version state
+- [ ] Make Wanted and Latest labels and highlight group configurable
 - [ ] Auto-load plugin only in Node.js projects (currently activates in `package.json` files only)
 - [ ] Expose an API to get overall project dependency status:
 

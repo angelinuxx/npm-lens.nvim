@@ -10,20 +10,32 @@ local M = {}
 ---@field newerAvailable nvim_lens.StatusOptions?: The configuration for the status when newer version is available
 ---
 ---@class nvim_lens.StatusOptions
----@field icon string?: The icon to show for this status
+---@field label string?: The label to show for this status
+---@field hl vim.api.keyset.highlight?: The highlight group config for this status
 
 ---@type nvim_lens.Options
 local defaults = {
 	enable = true,
 	status = {
-		uptodate = { icon = "󰄲" },
-		wantedAvailable = { icon = "󰍵" },
-		newerAvailable = { icon = "󰀧" },
+		uptodate = { label = "󰄲", hl = { link = "DiagnosticUnnecessary" } },
+		wantedAvailable = { label = "󰍵", hl = { link = "DiagnosticVirtualTextWarn" } },
+		newerAvailable = { label = "󰀧", hl = { link = "DiagnosticVirtualTextError" } },
 	},
 }
 
+local init_highlight = function(opts)
+	vim.api.nvim_set_hl(0, "NpmLensUptodate", opts.status.uptodate.hl)
+	vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", opts.status.wantedAvailable.hl)
+	vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", opts.status.newerAvailable.hl)
+	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", { fg = "#6c7087" })
+	vim.api.nvim_set_hl(0, "NpmLensSeparators", { fg = "#9399b3" })
+end
+
+-- Initialize the default options, which can be overridden by the user through setup
+-- or options passed in when using lazy.nvim
 ---@type nvim_lens.Options
 local options = vim.tbl_deep_extend("force", defaults, {})
+init_highlight(options)
 
 ---@class nvim_lens.State
 ---@field deps nvim_lens.Dependency[]: The list of dependencies
@@ -37,19 +49,10 @@ local state = {
 	bufnr = nil,
 }
 
--- TODO: make this configurable
-local init_highlight = function()
-	vim.api.nvim_set_hl(0, "NpmLensUptodate", { link = "DiagnosticUnnecessary" })
-	vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", { link = "DiagnosticVirtualTextWarn" })
-	vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", { link = "DiagnosticVirtualTextError" })
-	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", { fg = "#6c7087" })
-	vim.api.nvim_set_hl(0, "NpmLensSeparators", { fg = "#9399b3" })
-end
-init_highlight()
-
 --- Plugin setup
 M.setup = function(opts)
 	options = vim.tbl_deep_extend("force", defaults, opts or {})
+	init_highlight(options)
 	state.show = options.enable
 end
 
@@ -65,23 +68,23 @@ end
 local add_virtual_text = function(bufnr, deps)
 	-- Define the virtual text to display
 	for _, dep in ipairs(deps) do
-		local icon = options.status.uptodate.icon
+		local label = options.status.uptodate.label
 		local hl_group = "NpmLensUptodate"
 		local available = ""
 		local outdated = dep.latest ~= nil and dep.wanted ~= nil
 		if outdated then
 			available = "Wanted: " .. dep.wanted .. " - Latest: " .. dep.latest
 			if dep.wanted == dep.latest then
-				icon = options.status.wantedAvailable.icon
+				label = options.status.wantedAvailable.label
 				hl_group = "NpmLensWantedAvailable"
 			else
-				icon = options.status.newerAvailable.icon
+				label = options.status.newerAvailable.label
 				hl_group = "NpmLensNewerAvailable"
 			end
 		end
 
 		local virt_text = {
-			{ icon .. " " .. dep.current, hl_group },
+			{ label .. " " .. dep.current, hl_group },
 		}
 		if outdated then
 			table.insert(virt_text, { "  ", "NpmLensSeparators" })

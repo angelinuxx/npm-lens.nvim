@@ -5,9 +5,9 @@ local M = {}
 ---@field status nvim_lens.Statuses: The statuses configuration for the plugin
 
 ---@class nvim_lens.Statuses
----@field latest nvim_lens.StatusOptions?: The configuration for the latest status
----@field outdated nvim_lens.StatusOptions?: The configuration for the outdated status
----@field outdatedMinor nvim_lens.StatusOptions?: The configuration for the outdated minor status
+---@field uptodate nvim_lens.StatusOptions?: The configuration for the status when package is up to date
+---@field wantedAvailable nvim_lens.StatusOptions?: The configuration for the status when wanted version is available (and there is no newer version)
+---@field newerAvailable nvim_lens.StatusOptions?: The configuration for the status when newer version is available
 ---
 ---@class nvim_lens.StatusOptions
 ---@field icon string?: The icon to show for this status
@@ -16,9 +16,9 @@ local M = {}
 local defaults = {
 	enable = true,
 	status = {
-		latest = { icon = "󰄲" },
-		outdated = { icon = "󰀧" },
-		outdatedMinor = { icon = "󰍵" },
+		uptodate = { icon = "󰄲" },
+		wantedAvailable = { icon = "󰍵" },
+		newerAvailable = { icon = "󰀧" },
 	},
 }
 
@@ -39,10 +39,11 @@ local state = {
 
 -- TODO: make this configurable
 local init_highlight = function()
-	vim.api.nvim_set_hl(0, "NpmLensLatest", { link = "DiagnosticUnnecessary" })
-	vim.api.nvim_set_hl(0, "NpmLensOutdatedMinor", { link = "DiagnosticVirtualTextWarn" })
-	vim.api.nvim_set_hl(0, "NpmLensOutdated", { link = "DiagnosticVirtualTextError" })
-	vim.api.nvim_set_hl(0, "NpmLensAvailable", { link = "DiagnosticVirtualTextInfo" })
+	vim.api.nvim_set_hl(0, "NpmLensUptodate", { link = "DiagnosticUnnecessary" })
+	vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", { link = "DiagnosticVirtualTextWarn" })
+	vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", { link = "DiagnosticVirtualTextError" })
+	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", { fg = "#6c7087" })
+	vim.api.nvim_set_hl(0, "NpmLensSeparators", { fg = "#9399b3" })
 end
 init_highlight()
 
@@ -64,29 +65,27 @@ end
 local add_virtual_text = function(bufnr, deps)
 	-- Define the virtual text to display
 	for _, dep in ipairs(deps) do
-		local icon = options.status.latest.icon
-		local hl_group = "NpmLensLatest"
-		local available = "󰏕 "
+		local icon = options.status.uptodate.icon
+		local hl_group = "NpmLensUptodate"
+		local available = ""
 		local outdated = dep.latest ~= nil and dep.wanted ~= nil
 		if outdated then
-			available = available .. dep.wanted
-			if dep.wanted ~= dep.latest then
-				icon = options.status.outdated.icon
-				hl_group = "NpmLensOutdated"
-				available = available .. "  󰎔 " .. dep.latest
+			available = "Wanted: " .. dep.wanted .. " - Latest: " .. dep.latest
+			if dep.wanted == dep.latest then
+				icon = options.status.wantedAvailable.icon
+				hl_group = "NpmLensWantedAvailable"
 			else
-				icon = options.status.outdatedMinor.icon
-				hl_group = "NpmLensOutdatedMinor"
+				icon = options.status.newerAvailable.icon
+				hl_group = "NpmLensNewerAvailable"
 			end
 		end
 
 		local virt_text = {
-			-- { " ", "NpmLensLatest" },
 			{ icon .. " " .. dep.current, hl_group },
 		}
 		if outdated then
-			table.insert(virt_text, { "  ", "NpmLensLatest" })
-			table.insert(virt_text, { available, "NpmLensAvailable" })
+			table.insert(virt_text, { "  ", "NpmLensSeparators" })
+			table.insert(virt_text, { available, "NpmLensAvailableVersions" })
 		end
 		-- Set the virtual text
 		vim.api.nvim_buf_set_extmark(bufnr, state.ns_id, dep.line_nr, 0, {
@@ -179,7 +178,7 @@ local refresh_deps = function()
 	state.deps = parse_buffer(state.bufnr)
 	refresh_virtual_text(state.bufnr)
 
-	-- add version infos to dependencies table using npm_outdated
+	-- add version infos to dependencies table using `npm outdated`
 	vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
 	add_deps_info(state.deps)
 end

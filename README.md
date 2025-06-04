@@ -21,6 +21,12 @@ Displays version info as virtual text next to each dependency:
 - **Wanted**: The latest version that satisfies the semver range in `package.json`.
 - **Latest**: The absolute latest version available on the npm registry.
 
+The highlight of current changes based on the version state, by default as follows:
+
+- `uptodate`: muted text and 󰄲 icon. The highlight group is linked to `DiagnosticUnnecessary`.
+- `wantedAvailable`: warning text and 󰍵 icon. The highlight group is linked to `DiagnosticVirtualTextWarn`.
+- `newerAvailable`: error text and 󰀧 icon. The highlight group is linked to `DiagnosticVirtualTextError`
+
 ---
 
 ## 📦 Installation
@@ -34,9 +40,9 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
   opts = {
     enabled = true, -- If false, the info in `package.json` will not be displayed until `:NpmLensToggle` is called
     status = {
-      latest = { icon = "󰄲" },
-      outdated = { icon = "󰀧" },
-      outdatedMinor = { icon = "󰍵" },
+      uptodate = { icon = "󰄲" },
+      wantedAvailable = { icon = "󰍵" },
+      newerAvailable = { icon = "󰀧" },
     },
   },
 }

@@ -226,7 +226,7 @@ end
 
 --- Init plugin state
 ---@return boolean: Whether the plugin has been initialized
-M._init = function()
+local init = function()
 	-- TODO: check if npm is installed
 
 	-- check if current curren file is package.json
@@ -238,13 +238,6 @@ M._init = function()
 	if not state.startupCompleted then
 		state.bufnr = vim.api.nvim_get_current_buf()
 		refresh_deps()
-		vim.api.nvim_create_autocmd("BufWritePost", {
-			group = vim.api.nvim_create_augroup("npm-lens.refresh", { clear = true }),
-			pattern = "package.json",
-			callback = function()
-				require("npm-lens").refresh()
-			end,
-		})
 		state.startupCompleted = true
 	end
 
@@ -255,7 +248,7 @@ end
 M.toggle = function()
 	local firstTime = not state.startupCompleted
 	-- The _init function is idempotent
-	if M._init() then
+	if init() then
 		if firstTime then
 			return
 		end
@@ -272,7 +265,7 @@ end
 --- Refresh deps info
 M.refresh = function()
 	local firstTime = not state.startupCompleted
-	if M._init() then
+	if init() then
 		if not firstTime then
 			refresh_deps()
 		end

@@ -1,11 +1,15 @@
 -- Load plugin on package.json
-vim.api.nvim_create_autocmd("BufReadPost", {
-	group = vim.api.nvim_create_augroup("npm-lens.init", { clear = true }),
-	pattern = "package.json",
-	callback = function()
-		require("npm-lens")._init()
-	end,
-})
+local group = vim.api.nvim_create_augroup("npm-lens", { clear = true })
+for _, event in ipairs({ "BufReadPost", "BufWritePost" }) do
+	vim.api.nvim_create_autocmd(event, {
+		group = group,
+		pattern = "package.json",
+		callback = function()
+			-- Refresh func calls init if needed
+			require("npm-lens").refresh()
+		end,
+	})
+end
 
 -- Toggle command
 vim.api.nvim_create_user_command("NpmLensToggle", function()

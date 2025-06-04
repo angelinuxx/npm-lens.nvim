@@ -3,15 +3,34 @@ local M = {}
 ---@class nvim_lens.Options
 ---@field enable boolean: Whether the virtual text is enabled on startup
 ---@field status nvim_lens.Statuses: The statuses configuration for the plugin
+---@field availableSection nvim_lens.AvailableSection: The available section configuration for the plugin
 
 ---@class nvim_lens.Statuses
----@field uptodate nvim_lens.StatusOptions?: The configuration for the status when package is up to date
----@field wantedAvailable nvim_lens.StatusOptions?: The configuration for the status when wanted version is available (and there is no newer version)
----@field newerAvailable nvim_lens.StatusOptions?: The configuration for the status when newer version is available
----
+---@field uptodate nvim_lens.StatusOptions: The configuration for the status when package is up to date
+---@field wantedAvailable nvim_lens.StatusOptions: The configuration for the status when wanted version is available (and there is no newer version)
+---@field newerAvailable nvim_lens.StatusOptions: The configuration for the status when newer version is available
+
 ---@class nvim_lens.StatusOptions
----@field label string?: The label to show for this status
----@field hl vim.api.keyset.highlight?: The highlight group config for this status
+---@field label string: The label to show for this status
+---@field hl vim.api.keyset.highlight: The highlight group config for this status
+
+---@class nvim_lens.AvailableSection
+---@field wantedLabel string: The label to show for the wanted version
+---@field latestLabel string: The label to show for the latest version
+---@field hl vim.api.keyset.highlight: The highlight group config for this section
+
+---@class nvim_lens.Dependency
+---@field line_nr number: The line number where the dependency is written
+---@field name string: The name of the package
+---@field current string: The current installed version
+---@field wanted string|nil: The wanted version
+---@field latest string|nil: The latest version
+
+---@class nvim_lens.State
+---@field deps nvim_lens.Dependency[]: The list of dependencies
+---@field show boolean: Whether the virtual text is shown
+---@field ns_id number: The namespace id for the virtual text
+---@field bufnr number|nil: The buffer number
 
 ---@type nvim_lens.Options
 local defaults = {
@@ -21,13 +40,20 @@ local defaults = {
 		wantedAvailable = { label = "󰍵", hl = { link = "DiagnosticVirtualTextWarn" } },
 		newerAvailable = { label = "󰀧", hl = { link = "DiagnosticVirtualTextError" } },
 	},
+	availableSection = {
+		wantedLabel = "Wanted:",
+		latestLabel = "Latest:",
+		hl = { fg = "#6c7087" },
+	},
 }
 
+--- Initialize the highlight groups
+--- @param opts nvim_lens.Options
 local init_highlight = function(opts)
 	vim.api.nvim_set_hl(0, "NpmLensUptodate", opts.status.uptodate.hl)
 	vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", opts.status.wantedAvailable.hl)
 	vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", opts.status.newerAvailable.hl)
-	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", { fg = "#6c7087" })
+	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", opts.availableSection.hl)
 	vim.api.nvim_set_hl(0, "NpmLensSeparators", { fg = "#9399b3" })
 end
 
@@ -37,11 +63,8 @@ end
 local options = vim.tbl_deep_extend("force", defaults, {})
 init_highlight(options)
 
----@class nvim_lens.State
----@field deps nvim_lens.Dependency[]: The list of dependencies
----@field show boolean: Whether the virtual text is shown
----@field ns_id number: The namespace id for the virtual text
----@field bufnr number|nil: The buffer number
+--- Global plugin status
+---@type nvim_lens.State
 local state = {
 	deps = {},
 	show = options.enable,
@@ -56,39 +79,51 @@ M.setup = function(opts)
 	state.show = options.enable
 end
 
----@class nvim_lens.Dependency
----@field line_nr number: The line number where the dependency is written
----@field name string: The name of the package
----@field current string: The current installed version
----@field wanted string|nil: The wanted version
----@field latest string|nil: The latest version
+--- Retrieve data based on dep status
+---@param dep nvim_lens.Dependency: The dependency
+---@return string, string, boolean: The label, The highlight group, Whether the dependency is up to date
+local get_status_vars = function(dep)
+	local label = options.status.uptodate.label
+	local hl_group = "NpmLensUptodate"
+	local outdated = dep.latest ~= nil and dep.wanted ~= nil
+	if outdated then
+		if dep.wanted == dep.latest then
+			label = options.status.wantedAvailable.label
+			hl_group = "NpmLensWantedAvailable"
+		else
+			label = options.status.newerAvailable.label
+			hl_group = "NpmLensNewerAvailable"
+		end
+	end
+
+	return label, hl_group, outdated
+end
+
+--- Build the text for the available section
+--- @param wanted string: The wanted version
+--- @param latest string: The latest version
+local build_available_text = function(wanted, latest)
+	return options.availableSection.wantedLabel
+		.. " "
+		.. wanted
+		.. " - "
+		.. options.availableSection.latestLabel
+		.. " "
+		.. latest
+end
 
 -- Adds dependency virtual text
 ---@param deps nvim_lens.Dependency[]
 local add_virtual_text = function(bufnr, deps)
 	-- Define the virtual text to display
 	for _, dep in ipairs(deps) do
-		local label = options.status.uptodate.label
-		local hl_group = "NpmLensUptodate"
-		local available = ""
-		local outdated = dep.latest ~= nil and dep.wanted ~= nil
-		if outdated then
-			available = "Wanted: " .. dep.wanted .. " - Latest: " .. dep.latest
-			if dep.wanted == dep.latest then
-				label = options.status.wantedAvailable.label
-				hl_group = "NpmLensWantedAvailable"
-			else
-				label = options.status.newerAvailable.label
-				hl_group = "NpmLensNewerAvailable"
-			end
-		end
-
+		local label, hl_group, outdated = get_status_vars(dep)
 		local virt_text = {
 			{ label .. " " .. dep.current, hl_group },
 		}
 		if outdated then
 			table.insert(virt_text, { "  ", "NpmLensSeparators" })
-			table.insert(virt_text, { available, "NpmLensAvailableVersions" })
+			table.insert(virt_text, { build_available_text(dep.wanted, dep.latest), "NpmLensAvailableVersions" })
 		end
 		-- Set the virtual text
 		vim.api.nvim_buf_set_extmark(bufnr, state.ns_id, dep.line_nr, 0, {

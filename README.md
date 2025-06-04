@@ -38,9 +38,11 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   'angelinuxx/npm-lens.nvim',
-  -- Optional: these are the default options
+
+  -- Optional: these are the default options, you should define only the ones
+  -- you want to change because they will be merged with the default ones
   opts = {
-    enabled = true, -- If false, the info in `package.json` will not be displayed until `:NpmLensToggle` is called
+    enabled = true, -- If false, info in `package.json` won't display until `:NpmLensToggle` is used
     status = {
       uptodate = {
         label = "󰄲",
@@ -55,6 +57,11 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
         hl = { link = "DiagnosticVirtualTextError" }
       },
     },
+    availableSection = {
+      wantedLabel = "Wanted:",
+      latestLabel = "Latest:",
+      hl = { fg = "#6c7087" }
+    }
   },
 }
 ```
@@ -80,7 +87,7 @@ Use the command `:NpmLensRefresh` to trigger a refresh of the dependencies info.
 #### 🧭 Roadmap
 
 - [x] Configurable highlight groups for each version state
-- [ ] Make Wanted and Latest labels and highlight group configurable
+- [x] Make Available section (`Wanted` and `Latest`) labels and highlight group configurable
 - [ ] Auto-load plugin only in Node.js projects (currently activates in `package.json` files only)
 - [ ] Expose an API to get overall project dependency status:
 

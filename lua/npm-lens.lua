@@ -238,6 +238,13 @@ M._init = function()
 	if not state.startupCompleted then
 		state.bufnr = vim.api.nvim_get_current_buf()
 		refresh_deps()
+		vim.api.nvim_create_autocmd("BufWritePost", {
+			group = vim.api.nvim_create_augroup("npm-lens.refresh", { clear = true }),
+			pattern = "package.json",
+			callback = function()
+				require("npm-lens").refresh()
+			end,
+		})
 		state.startupCompleted = true
 	end
 

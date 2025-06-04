@@ -1,7 +1,6 @@
 -- Load plugin on package.json
-local group = vim.api.nvim_create_augroup("npm-lens", { clear = true })
 vim.api.nvim_create_autocmd("BufReadPost", {
-	group = group,
+	group = vim.api.nvim_create_augroup("npm-lens.init", { clear = true }),
 	pattern = "package.json",
 	callback = function()
 		require("npm-lens")._init()

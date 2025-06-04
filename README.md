@@ -1,5 +1,7 @@
 # `npm-lens.nvim`
 
+![npm-lens](./docs/preview.png)
+
 A lightweight Neovim plugin that shows the status of dependencies in your
 `package.json` file. Nothing more, nothing less.
 

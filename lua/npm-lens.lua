@@ -20,7 +20,7 @@ local M = {}
 ---@field hl vim.api.keyset.highlight: The highlight group config for this section
 
 ---@class nvim_lens.Dependency
----@field line_nr number: The line number where the dependency is written
+---@field linenr number: The line number where the dependency is written
 ---@field name string: The name of the package
 ---@field current string: The current installed version
 ---@field wanted string|nil: The wanted version
@@ -29,8 +29,9 @@ local M = {}
 ---@class nvim_lens.State
 ---@field deps nvim_lens.Dependency[]: The list of dependencies
 ---@field show boolean: Whether the virtual text is shown
----@field ns_id number: The namespace id for the virtual text
+---@field nsid number: The namespace id for the virtual text
 ---@field bufnr number|nil: The buffer number
+---@field startupCompleted boolean: Whether the startup has completed (means bufnr is set and deps are parsed)
 
 ---@type nvim_lens.Options
 local defaults = {
@@ -68,8 +69,9 @@ init_highlight(options)
 local state = {
 	deps = {},
 	show = options.enable,
-	ns_id = vim.api.nvim_create_namespace("npm-lens.nvim"),
+	nsid = vim.api.nvim_create_namespace("npm-lens.nvim"),
 	bufnr = nil,
+	startupCompleted = false,
 }
 
 --- Plugin setup
@@ -126,7 +128,7 @@ local add_virtual_text = function(bufnr, deps)
 			table.insert(virt_text, { build_available_text(dep.wanted, dep.latest), "NpmLensAvailableVersions" })
 		end
 		-- Set the virtual text
-		vim.api.nvim_buf_set_extmark(bufnr, state.ns_id, dep.line_nr, 0, {
+		vim.api.nvim_buf_set_extmark(bufnr, state.nsid, dep.linenr, 0, {
 			virt_text = virt_text,
 			hl_mode = "combine",
 		})
@@ -135,7 +137,7 @@ end
 
 --- Remove dependency virtual text
 local remove_virtual_text = function(bufnr)
-	vim.api.nvim_buf_clear_namespace(bufnr, state.ns_id, 0, -1)
+	vim.api.nvim_buf_clear_namespace(bufnr, state.nsid, 0, -1)
 end
 
 local is_npm_file = function()
@@ -173,7 +175,7 @@ local parse_buffer = function(bfnr)
 				table.insert(deps, {
 					name = name,
 					current = version:gsub("%^", ""):gsub("~", ""),
-					line_nr = i - 1,
+					linenr = i - 1,
 				})
 			end
 		end
@@ -187,6 +189,7 @@ local parse_buffer = function(bfnr)
 
 	return deps
 end
+
 --- Takes a list of dependencies and add all the version infos (current, wanted, latest)
 ---@param deps nvim_lens.Dependency[]
 local add_deps_info = function(deps)
@@ -222,44 +225,51 @@ local refresh_deps = function()
 end
 
 --- Init plugin state
+---@return boolean: Whether the plugin has been initialized
 M._init = function()
 	-- TODO: check if npm is installed
 
 	-- check if current curren file is package.json
 	if not is_npm_file() then
 		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
-		return
+		return false
 	end
 
-	state.bufnr = vim.api.nvim_get_current_buf()
-	refresh_deps()
+	if not state.startupCompleted then
+		state.bufnr = vim.api.nvim_get_current_buf()
+		refresh_deps()
+		state.startupCompleted = true
+	end
+
+	return true
 end
 
 --- Toggle the virtual text
 M.toggle = function()
-	-- check if current curren file is package.json
-	if not is_npm_file() then
-		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
-		return
-	end
-
-	if state.show then
-		remove_virtual_text(state.bufnr)
-		state.show = false
-	else
-		add_virtual_text(state.bufnr, state.deps)
-		state.show = true
+	local firstTime = not state.startupCompleted
+	-- The _init function is idempotent
+	if M._init() then
+		if firstTime then
+			return
+		end
+		if state.show then
+			remove_virtual_text(state.bufnr)
+			state.show = false
+		else
+			add_virtual_text(state.bufnr, state.deps)
+			state.show = true
+		end
 	end
 end
 
 --- Refresh deps info
 M.refresh = function()
-	-- check if current curren file is package.json
-	if not is_npm_file() then
-		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
-		return
+	local firstTime = not state.startupCompleted
+	if M._init() then
+		if not firstTime then
+			refresh_deps()
+		end
 	end
-	refresh_deps()
 end
 
 return M

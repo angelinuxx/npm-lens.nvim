@@ -1,22 +1,22 @@
 local M = {}
 
 ---@class nvim_lens.Options
----@field enable boolean: Whether the virtual text is enabled on startup
+---@field show boolean: Whether the virtual text is enabled on startup
 ---@field status nvim_lens.Statuses: The statuses configuration for the plugin
----@field availableSection nvim_lens.AvailableSection: The available section configuration for the plugin
+---@field available_section nvim_lens.AvailableSection: The available section configuration for the plugin
 
 ---@class nvim_lens.Statuses
 ---@field uptodate nvim_lens.StatusOptions: The configuration for the status when package is up to date
----@field wantedAvailable nvim_lens.StatusOptions: The configuration for the status when wanted version is available (and there is no newer version)
----@field newerAvailable nvim_lens.StatusOptions: The configuration for the status when newer version is available
+---@field wanted_available nvim_lens.StatusOptions: The configuration for the status when wanted version is available (and there is no newer version)
+---@field newer_available nvim_lens.StatusOptions: The configuration for the status when newer version is available
 
 ---@class nvim_lens.StatusOptions
 ---@field label string: The label to show for this status
 ---@field hl vim.api.keyset.highlight: The highlight group config for this status
 
 ---@class nvim_lens.AvailableSection
----@field wantedLabel string: The label to show for the wanted version
----@field latestLabel string: The label to show for the latest version
+---@field wanted_label string: The label to show for the wanted version
+---@field latest_label string: The label to show for the latest version
 ---@field hl vim.api.keyset.highlight: The highlight group config for this section
 
 ---@class nvim_lens.Dependency
@@ -31,19 +31,19 @@ local M = {}
 ---@field show boolean: Whether the virtual text is shown
 ---@field nsid number: The namespace id for the virtual text
 ---@field bufnr number|nil: The buffer number
----@field startupCompleted boolean: Whether the startup has completed (means bufnr is set and deps are parsed)
+---@field startup_completed boolean: Whether the startup has completed (means bufnr is set and deps are parsed)
 
 ---@type nvim_lens.Options
 local defaults = {
-	enable = true,
+	show = true,
 	status = {
 		uptodate = { label = "󰄲", hl = { link = "DiagnosticUnnecessary" } },
-		wantedAvailable = { label = "󰍵", hl = { link = "DiagnosticVirtualTextWarn" } },
-		newerAvailable = { label = "󰀧", hl = { link = "DiagnosticVirtualTextError" } },
+		wanted_available = { label = "󰍵", hl = { link = "DiagnosticVirtualTextWarn" } },
+		newer_available = { label = "󰀧", hl = { link = "DiagnosticVirtualTextError" } },
 	},
-	availableSection = {
-		wantedLabel = "Wanted:",
-		latestLabel = "Latest:",
+	available_section = {
+		wanted_label = "Wanted:",
+		latest_label = "Latest:",
 		hl = { fg = "#6c7087" },
 	},
 }
@@ -52,9 +52,9 @@ local defaults = {
 --- @param opts nvim_lens.Options
 local init_highlight = function(opts)
 	vim.api.nvim_set_hl(0, "NpmLensUptodate", opts.status.uptodate.hl)
-	vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", opts.status.wantedAvailable.hl)
-	vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", opts.status.newerAvailable.hl)
-	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", opts.availableSection.hl)
+	vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", opts.status.wanted_available.hl)
+	vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", opts.status.newer_available.hl)
+	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", opts.available_section.hl)
 	vim.api.nvim_set_hl(0, "NpmLensSeparators", { fg = "#9399b3" })
 end
 
@@ -68,17 +68,17 @@ init_highlight(options)
 ---@type nvim_lens.State
 local state = {
 	deps = {},
-	show = options.enable,
+	show = options.show,
 	nsid = vim.api.nvim_create_namespace("npm-lens.nvim"),
 	bufnr = nil,
-	startupCompleted = false,
+	startup_completed = false,
 }
 
 --- Plugin setup
 M.setup = function(opts)
 	options = vim.tbl_deep_extend("force", defaults, opts or {})
 	init_highlight(options)
-	state.show = options.enable
+	state.show = options.show
 end
 
 --- Retrieve data based on dep status
@@ -90,10 +90,10 @@ local get_status_vars = function(dep)
 	local outdated = dep.latest ~= nil and dep.wanted ~= nil
 	if outdated then
 		if dep.wanted == dep.latest then
-			label = options.status.wantedAvailable.label
+			label = options.status.wanted_available.label
 			hl_group = "NpmLensWantedAvailable"
 		else
-			label = options.status.newerAvailable.label
+			label = options.status.newer_available.label
 			hl_group = "NpmLensNewerAvailable"
 		end
 	end
@@ -105,11 +105,11 @@ end
 --- @param wanted string: The wanted version
 --- @param latest string: The latest version
 local build_available_text = function(wanted, latest)
-	return options.availableSection.wantedLabel
+	return options.available_section.wanted_label
 		.. " "
 		.. wanted
 		.. " - "
-		.. options.availableSection.latestLabel
+		.. options.available_section.latest_label
 		.. " "
 		.. latest
 end
@@ -234,11 +234,13 @@ local init = function()
 		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
 		return false
 	end
+	if not state.startup_completed then
 
-	if not state.startupCompleted then
 		state.bufnr = vim.api.nvim_get_current_buf()
 		refresh_deps()
-		state.startupCompleted = true
+		-- Indicate that the startup process has completed;
+		-- async tasks may still be running, but we have initiated them.
+		state.startup_completed = true
 	end
 
 	return true
@@ -246,7 +248,7 @@ end
 
 --- Toggle the virtual text
 M.toggle = function()
-	local firstTime = not state.startupCompleted
+	local firstTime = not state.startup_completed
 	-- The _init function is idempotent
 	if init() then
 		if firstTime then
@@ -264,7 +266,7 @@ end
 
 --- Refresh deps info
 M.refresh = function()
-	local firstTime = not state.startupCompleted
+	local firstTime = not state.startup_completed
 	if init() then
 		if not firstTime then
 			refresh_deps()

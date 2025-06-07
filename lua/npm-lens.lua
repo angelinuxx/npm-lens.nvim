@@ -152,17 +152,10 @@ local refresh_virtual_text = function(bufnr)
 	end
 end
 
----@param bfnr number
----@return nvim_lens.Dependency[]: The list of dependencies
-local parse_buffer = function(bfnr)
-	-- Read the contents of the buffer
-	local lines = vim.api.nvim_buf_get_lines(bfnr, 0, -1, false)
-	if #lines == 0 then
-		return {}
-	end
-
-	-- Cause we have to keep the line number were dependency is written in buffer we need to loop over the buffer lines
-	-- and build the deps table
+---Parse lines
+---@param lines string[]
+---@return nvim_lens.Dependency[]
+local parse_lines = function(lines)
 	local deps = {}
 	local isDep = false -- Flag to indicate if we are in a dependency sections
 	for i, line in ipairs(lines) do
@@ -186,6 +179,20 @@ local parse_buffer = function(bfnr)
 			isDep = false
 		end
 	end
+
+	return deps
+end
+
+---@param bfnr number
+---@return nvim_lens.Dependency[]: The list of dependencies
+local parse_buffer = function(bfnr)
+	-- Read the contents of the buffer
+	local lines = vim.api.nvim_buf_get_lines(bfnr, 0, -1, false)
+	if #lines == 0 then
+		return {}
+	end
+
+	local deps = parse_lines(lines)
 
 	return deps
 end
@@ -235,7 +242,6 @@ local init = function()
 		return false
 	end
 	if not state.startup_completed then
-
 		state.bufnr = vim.api.nvim_get_current_buf()
 		refresh_deps()
 		-- Indicate that the startup process has completed;
@@ -273,5 +279,8 @@ M.refresh = function()
 		end
 	end
 end
+
+--- Exposing for testing
+M._parse_lines = parse_lines
 
 return M

@@ -1,6 +1,7 @@
 local parse_lines = require("npm-lens")._parse_lines
+local parse_npm_outdated = require("npm-lens")._parse_npm_outdated
 
-describe("npm-lens.parse_deps", function()
+describe("npm-lens", function()
   it("should parse an empty file", function()
     assert.are.same({}, parse_lines {})
   end)
@@ -78,6 +79,88 @@ describe("npm-lens.parse_deps", function()
         "  }",
         "}",
       }
+    )
+  end)
+
+  it("should parse empty npm outdated output", function()
+    assert.are.same(
+      {
+        {
+          name = "package-name",
+          current = "1.0.0",
+          wanted = nil,
+          latest = nil,
+          linenr = 3,
+        },
+      },
+      parse_npm_outdated({
+        {
+          name = "package-name",
+          current = "1.0.0",
+          wanted = nil,
+          latest = nil,
+          linenr = 3,
+        },
+      }, {})
+    )
+  end)
+
+  it("should parse npm outdated output", function()
+    assert.are.same(
+      {
+        {
+          name = "package-name",
+          current = "1.1.0",
+          wanted = "1.2.1",
+          latest = "2.0.0",
+          linenr = 3,
+        },
+      },
+      parse_npm_outdated({
+        {
+          name = "package-name",
+          current = "1.0.0",
+          wanted = nil,
+          latest = nil,
+          linenr = 3,
+        },
+      }, {
+        ["package-name"] = {
+          current = "1.1.0",
+          wanted = "1.2.1",
+          latest = "2.0.0",
+        },
+      })
+    )
+  end)
+
+  it("should ignore dependencies from npm outdated output that are not in the input deps", function()
+    assert.are.same(
+      {
+        {
+          name = "package-name",
+          current = "1.0.0",
+          wanted = nil,
+          latest = nil,
+          linenr = 3,
+        },
+      },
+      parse_npm_outdated({
+        {
+          name = "package-name",
+          current = "1.0.0",
+          wanted = nil,
+          latest = nil,
+          linenr = 3,
+        },
+      }, {
+
+        ["other-package-name"] = {
+          current = "1.1.0",
+          wanted = "1.2.1",
+          latest = "2.0.0",
+        },
+      })
     )
   end)
 end)

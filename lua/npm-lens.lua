@@ -35,27 +35,27 @@ local M = {}
 
 ---@type nvim_lens.Options
 local defaults = {
-	show = true,
-	status = {
-		uptodate = { label = "󰄲", hl = { link = "DiagnosticUnnecessary" } },
-		wanted_available = { label = "󰍵", hl = { link = "DiagnosticVirtualTextWarn" } },
-		newer_available = { label = "󰀧", hl = { link = "DiagnosticVirtualTextError" } },
-	},
-	available_section = {
-		wanted_label = "Wanted:",
-		latest_label = "Latest:",
-		hl = { fg = "#6c7087" },
-	},
+  show = true,
+  status = {
+    uptodate = { label = "󰄲", hl = { link = "DiagnosticUnnecessary" } },
+    wanted_available = { label = "󰍵", hl = { link = "DiagnosticVirtualTextWarn" } },
+    newer_available = { label = "󰀧", hl = { link = "DiagnosticVirtualTextError" } },
+  },
+  available_section = {
+    wanted_label = "Wanted:",
+    latest_label = "Latest:",
+    hl = { fg = "#6c7087" },
+  },
 }
 
 --- Initialize the highlight groups
 --- @param opts nvim_lens.Options
 local init_highlight = function(opts)
-	vim.api.nvim_set_hl(0, "NpmLensUptodate", opts.status.uptodate.hl)
-	vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", opts.status.wanted_available.hl)
-	vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", opts.status.newer_available.hl)
-	vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", opts.available_section.hl)
-	vim.api.nvim_set_hl(0, "NpmLensSeparators", { fg = "#9399b3" })
+  vim.api.nvim_set_hl(0, "NpmLensUptodate", opts.status.uptodate.hl)
+  vim.api.nvim_set_hl(0, "NpmLensWantedAvailable", opts.status.wanted_available.hl)
+  vim.api.nvim_set_hl(0, "NpmLensNewerAvailable", opts.status.newer_available.hl)
+  vim.api.nvim_set_hl(0, "NpmLensAvailableVersions", opts.available_section.hl)
+  vim.api.nvim_set_hl(0, "NpmLensSeparators", { fg = "#9399b3" })
 end
 
 -- Initialize the default options, which can be overridden by the user through setup
@@ -67,220 +67,229 @@ init_highlight(options)
 --- Global plugin status
 ---@type nvim_lens.State
 local state = {
-	deps = {},
-	show = options.show,
-	nsid = vim.api.nvim_create_namespace("npm-lens.nvim"),
-	bufnr = nil,
-	startup_completed = false,
+  deps = {},
+  show = options.show,
+  nsid = vim.api.nvim_create_namespace "npm-lens.nvim",
+  bufnr = nil,
+  startup_completed = false,
 }
 
 --- Plugin setup
 M.setup = function(opts)
-	options = vim.tbl_deep_extend("force", defaults, opts or {})
-	init_highlight(options)
-	state.show = options.show
+  options = vim.tbl_deep_extend("force", defaults, opts or {})
+  init_highlight(options)
+  state.show = options.show
 end
 
 --- Retrieve data based on dep status
 ---@param dep nvim_lens.Dependency: The dependency
 ---@return string, string, boolean: The label, The highlight group, Whether the dependency is up to date
 local get_status_vars = function(dep)
-	local label = options.status.uptodate.label
-	local hl_group = "NpmLensUptodate"
-	local outdated = dep.latest ~= nil and dep.wanted ~= nil
-	if outdated then
-		if dep.wanted == dep.latest then
-			label = options.status.wanted_available.label
-			hl_group = "NpmLensWantedAvailable"
-		else
-			label = options.status.newer_available.label
-			hl_group = "NpmLensNewerAvailable"
-		end
-	end
+  local label = options.status.uptodate.label
+  local hl_group = "NpmLensUptodate"
+  local outdated = dep.latest ~= nil and dep.wanted ~= nil
+  if outdated then
+    if dep.wanted == dep.latest then
+      label = options.status.wanted_available.label
+      hl_group = "NpmLensWantedAvailable"
+    else
+      label = options.status.newer_available.label
+      hl_group = "NpmLensNewerAvailable"
+    end
+  end
 
-	return label, hl_group, outdated
+  return label, hl_group, outdated
 end
 
 --- Build the text for the available section
 --- @param wanted string: The wanted version
 --- @param latest string: The latest version
 local build_available_text = function(wanted, latest)
-	return options.available_section.wanted_label
-		.. " "
-		.. wanted
-		.. " - "
-		.. options.available_section.latest_label
-		.. " "
-		.. latest
+  return options.available_section.wanted_label
+    .. " "
+    .. wanted
+    .. " - "
+    .. options.available_section.latest_label
+    .. " "
+    .. latest
 end
 
 -- Adds dependency virtual text
 ---@param deps nvim_lens.Dependency[]
 local add_virtual_text = function(bufnr, deps)
-	-- Define the virtual text to display
-	for _, dep in ipairs(deps) do
-		local label, hl_group, outdated = get_status_vars(dep)
-		local virt_text = {
-			{ label .. " " .. dep.current, hl_group },
-		}
-		if outdated then
-			table.insert(virt_text, { "  ", "NpmLensSeparators" })
-			table.insert(virt_text, { build_available_text(dep.wanted, dep.latest), "NpmLensAvailableVersions" })
-		end
-		-- Set the virtual text
-		vim.api.nvim_buf_set_extmark(bufnr, state.nsid, dep.linenr, 0, {
-			virt_text = virt_text,
-			hl_mode = "combine",
-		})
-	end
+  -- Define the virtual text to display
+  for _, dep in ipairs(deps) do
+    local label, hl_group, outdated = get_status_vars(dep)
+    local virt_text = {
+      { label .. " " .. dep.current, hl_group },
+    }
+    if outdated then
+      table.insert(virt_text, { "  ", "NpmLensSeparators" })
+      table.insert(virt_text, { build_available_text(dep.wanted, dep.latest), "NpmLensAvailableVersions" })
+    end
+    -- Set the virtual text
+    vim.api.nvim_buf_set_extmark(bufnr, state.nsid, dep.linenr, 0, {
+      virt_text = virt_text,
+      hl_mode = "combine",
+    })
+  end
 end
 
 --- Remove dependency virtual text
 local remove_virtual_text = function(bufnr)
-	vim.api.nvim_buf_clear_namespace(bufnr, state.nsid, 0, -1)
+  vim.api.nvim_buf_clear_namespace(bufnr, state.nsid, 0, -1)
 end
 
 local is_npm_file = function()
-	local filename = vim.fn.expand("%:t")
-	return filename == "package.json"
+  local filename = vim.fn.expand "%:t"
+  return filename == "package.json"
 end
 
 local refresh_virtual_text = function(bufnr)
-	if state.show then
-		remove_virtual_text(bufnr)
-		add_virtual_text(bufnr, state.deps)
-	end
+  if state.show then
+    remove_virtual_text(bufnr)
+    add_virtual_text(bufnr, state.deps)
+  end
 end
 
 ---Parse lines
 ---@param lines string[]
 ---@return nvim_lens.Dependency[]
 local parse_lines = function(lines)
-	local deps = {}
-	local isDep = false -- Flag to indicate if we are in a dependency sections
-	for i, line in ipairs(lines) do
-		-- Trim whitespace from the line
-		line = line:gsub("^%s*(.-)%s*$", "%1") -- Trim leading and trailing whitespace
-		if isDep then
-			-- Match lines that look like `"package-name": "version"`
-			local name, version = line:match('"(.+)"%s*:%s*"(.-)"')
-			if name and version then
-				table.insert(deps, {
-					name = name,
-					current = version:gsub("%^", ""):gsub("~", ""),
-					linenr = i - 1,
-				})
-			end
-		end
-		-- Check if we are in the dependencies or devDependencies section
-		if line:match('"dependencies"%s*:%s*{') or line:match('"devDependencies"%s*:%s*{') then
-			isDep = true
-		elseif line:match("}") then
-			isDep = false
-		end
-	end
+  local deps = {}
+  local isDep = false -- Flag to indicate if we are in a dependency sections
+  for i, line in ipairs(lines) do
+    -- Trim whitespace from the line
+    line = line:gsub("^%s*(.-)%s*$", "%1") -- Trim leading and trailing whitespace
+    if isDep then
+      -- Match lines that look like `"package-name": "version"`
+      local name, version = line:match '"(.+)"%s*:%s*"(.-)"'
+      if name and version then
+        table.insert(deps, {
+          name = name,
+          current = version:gsub("%^", ""):gsub("~", ""),
+          linenr = i - 1,
+        })
+      end
+    end
+    -- Check if we are in the dependencies or devDependencies section
+    if line:match '"dependencies"%s*:%s*{' or line:match '"devDependencies"%s*:%s*{' then
+      isDep = true
+    elseif line:match "}" then
+      isDep = false
+    end
+  end
 
-	return deps
+  return deps
 end
 
 ---@param bfnr number
 ---@return nvim_lens.Dependency[]: The list of dependencies
 local parse_buffer = function(bfnr)
-	-- Read the contents of the buffer
-	local lines = vim.api.nvim_buf_get_lines(bfnr, 0, -1, false)
-	if #lines == 0 then
-		return {}
-	end
+  -- Read the contents of the buffer
+  local lines = vim.api.nvim_buf_get_lines(bfnr, 0, -1, false)
+  if #lines == 0 then
+    return {}
+  end
 
-	local deps = parse_lines(lines)
+  local deps = parse_lines(lines)
 
-	return deps
+  return deps
 end
 
---- Takes a list of dependencies and add all the version infos (current, wanted, latest)
----@param deps nvim_lens.Dependency[]
-local add_deps_info = function(deps)
-	-- exec `npm outdated --json`
-	vim.system({ "npm", "outdated", "--json" }, { text = true }, function(outdated)
-		-- add a sleep for debugging
-		outdated = vim.json.decode(outdated.stdout)
+--- Parse the npm outdated json output
+--- @param deps nvim_lens.Dependency[]
+--- @param outdated table
+--- @return nvim_lens.Dependency[]
+local parse_npm_outdated = function(deps, outdated)
+  for _, dep in ipairs(deps) do
+    local outdated_dep = outdated[dep.name]
+    if outdated_dep then
+      dep.current = outdated_dep.current
+      dep.wanted = outdated_dep.wanted
+      dep.latest = outdated_dep.latest
+    end
+  end
 
-		-- reconcile outdated with deps
-		for _, dep in ipairs(deps) do
-			local outdated_dep = outdated[dep.name]
-			if outdated_dep then
-				dep.current = outdated_dep.current
-				dep.wanted = outdated_dep.wanted
-				dep.latest = outdated_dep.latest
-			end
-		end
-		state.deps = deps
-		vim.schedule(function()
-			refresh_virtual_text(state.bufnr)
-		end)
-	end)
+  return deps
+end
+
+--- Exec `npm outdated --json` asynchronously and call the on_complete function with the result
+---@param on_complete function: The function to call when the npm outdated command is completed, passing the outdated table
+local retrieve_npm_outdated = function(on_complete)
+  -- exec `npm outdated --json`
+  vim.system({ "npm", "outdated", "--json" }, { text = true }, function(outdated)
+    outdated = vim.json.decode(outdated.stdout)
+    on_complete(outdated)
+  end)
 end
 
 local refresh_deps = function()
-	-- parse package.json buffer using parse_buffer
-	state.deps = parse_buffer(state.bufnr)
-	refresh_virtual_text(state.bufnr)
+  -- parse package.json buffer using parse_buffer
+  state.deps = parse_buffer(state.bufnr)
+  refresh_virtual_text(state.bufnr)
 
-	-- add version infos to dependencies table using `npm outdated`
-	vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
-	add_deps_info(state.deps)
+  -- add version infos to dependencies table using `npm outdated`
+  vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
+  retrieve_npm_outdated(function(outdated)
+    state.deps = parse_npm_outdated(state.deps, outdated)
+    vim.schedule(function()
+      refresh_virtual_text(state.bufnr)
+    end)
+  end)
 end
 
 --- Init plugin state
 ---@return boolean: Whether the plugin has been initialized
 local init = function()
-	-- TODO: check if npm is installed
+  -- TODO: check if npm is installed
 
-	-- check if current curren file is package.json
-	if not is_npm_file() then
-		vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
-		return false
-	end
-	if not state.startup_completed then
-		state.bufnr = vim.api.nvim_get_current_buf()
-		refresh_deps()
-		-- Indicate that the startup process has completed;
-		-- async tasks may still be running, but we have initiated them.
-		state.startup_completed = true
-	end
+  -- check if current curren file is package.json
+  if not is_npm_file() then
+    vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
+    return false
+  end
+  if not state.startup_completed then
+    state.bufnr = vim.api.nvim_get_current_buf()
+    refresh_deps()
+    -- Indicate that the startup process has completed;
+    -- async tasks may still be running, but we have initiated them.
+    state.startup_completed = true
+  end
 
-	return true
+  return true
 end
 
 --- Toggle the virtual text
 M.toggle = function()
-	local firstTime = not state.startup_completed
-	-- The _init function is idempotent
-	if init() then
-		if firstTime then
-			return
-		end
-		if state.show then
-			remove_virtual_text(state.bufnr)
-			state.show = false
-		else
-			add_virtual_text(state.bufnr, state.deps)
-			state.show = true
-		end
-	end
+  local firstTime = not state.startup_completed
+  -- The _init function is idempotent
+  if init() then
+    if firstTime then
+      return
+    end
+    if state.show then
+      remove_virtual_text(state.bufnr)
+      state.show = false
+    else
+      add_virtual_text(state.bufnr, state.deps)
+      state.show = true
+    end
+  end
 end
 
 --- Refresh deps info
 M.refresh = function()
-	local firstTime = not state.startup_completed
-	if init() then
-		if not firstTime then
-			refresh_deps()
-		end
-	end
+  local firstTime = not state.startup_completed
+  if init() then
+    if not firstTime then
+      refresh_deps()
+    end
+  end
 end
 
 --- Exposing for testing
 M._parse_lines = parse_lines
+M._parse_npm_outdated = parse_npm_outdated
 
 return M

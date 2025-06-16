@@ -4,6 +4,7 @@ local M = {}
 ---@field show boolean: Whether the virtual text is enabled on startup
 ---@field status nvim_lens.Statuses: The statuses configuration for the plugin
 ---@field available_section nvim_lens.AvailableSection: The available section configuration for the plugin
+---@field hide_notifications boolean: Whether the notifications should be hidden
 
 ---@class nvim_lens.Statuses
 ---@field uptodate nvim_lens.StatusOptions: The configuration for the status when package is up to date
@@ -30,12 +31,18 @@ local M = {}
 ---@field deps nvim_lens.Dependency[]: The list of dependencies
 ---@field show boolean: Whether the virtual text is shown
 ---@field nsid number: The namespace id for the virtual text
----@field bufnr number|nil: The buffer number
----@field startup_completed boolean: Whether the startup has completed (means bufnr is set and deps are parsed)
+---@field startup_started boolean: Whether the startup has started, boot function is called
+---@field startup_completed boolean: Whether the startup has completed (deps are parsed)
+---@field package_json_path string|nil: The path to the package.json file
+
+---@class nvim_lens.ParseCallbacks
+---@field on_parse ?fun(deps: nvim_lens.Dependency[]): nil Runs after package.json is parsed
+---@field on_complete ?fun(deps: nvim_lens.Dependency[]): nil Runs after npm outdated is parsed
 
 ---@type nvim_lens.Options
 local defaults = {
   show = true,
+  hide_notifications = false,
   status = {
     uptodate = { label = "󰄲", hl = { link = "DiagnosticUnnecessary" } },
     wanted_available = { label = "󰍵", hl = { link = "DiagnosticVirtualTextWarn" } },
@@ -70,15 +77,44 @@ local state = {
   deps = {},
   show = options.show,
   nsid = vim.api.nvim_create_namespace "npm-lens.nvim",
-  bufnr = nil,
+  startup_started = false,
   startup_completed = false,
+  package_json_path = nil,
 }
+
+local root_file = "package.json"
 
 --- Plugin setup
 M.setup = function(opts)
   options = vim.tbl_deep_extend("force", defaults, opts or {})
   init_highlight(options)
   state.show = options.show
+end
+
+--- Try to detect the project root
+--- @return string
+local get_node_project_root = function()
+  local cwd = vim.fn.getcwd()
+
+  local result = vim.fs.find(root_file, {
+    upward = true,
+    path = cwd,
+    stop = vim.loop.os_homedir(),
+  })
+
+  return result[1] and vim.fs.dirname(result[1]) or nil
+end
+
+--- Try to detect the project root
+--- @return boolean
+local try_node_detect = function()
+  local root = get_node_project_root()
+  if root then
+    state.package_json_path = root .. "/" .. root_file
+    return true
+  end
+
+  return false
 end
 
 --- Retrieve data based on dep status
@@ -140,16 +176,28 @@ local remove_virtual_text = function(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, state.nsid, 0, -1)
 end
 
-local is_npm_file = function()
-  local filename = vim.fn.expand "%:t"
-  return filename == "package.json"
-end
-
 local refresh_virtual_text = function(bufnr)
   if state.show then
     remove_virtual_text(bufnr)
     add_virtual_text(bufnr, state.deps)
   end
+end
+
+--- Reads all lines of a file into a table, without loading a buffer
+---@param filepath string: absolute path to file
+---@return string[]: table of lines
+local read_lines = function(filepath)
+  local f = io.open(filepath, "r")
+  if not f then
+    return {}
+  end
+
+  local lines = {}
+  for line in f:lines() do
+    table.insert(lines, line)
+  end
+  f:close()
+  return lines
 end
 
 ---Parse lines
@@ -183,11 +231,12 @@ local parse_lines = function(lines)
   return deps
 end
 
----@param bfnr number
+---@param path string: The path to the package.json
 ---@return nvim_lens.Dependency[]: The list of dependencies
-local parse_buffer = function(bfnr)
-  -- Read the contents of the buffer
-  local lines = vim.api.nvim_buf_get_lines(bfnr, 0, -1, false)
+local parse_file = function(path)
+  -- Read the contents of the file
+  local lines = read_lines(path)
+  -- local lines = vim.api.nvim_buf_get_lines(bfnr, 0, -1, false)
   if #lines == 0 then
     return {}
   end
@@ -217,74 +266,120 @@ end
 --- Exec `npm outdated --json` asynchronously and call the on_complete function with the result
 ---@param on_complete function: The function to call when the npm outdated command is completed, passing the outdated table
 local retrieve_npm_outdated = function(on_complete)
-  -- exec `npm outdated --json`
   vim.system({ "npm", "outdated", "--json" }, { text = true }, function(outdated)
     outdated = vim.json.decode(outdated.stdout)
     on_complete(outdated)
   end)
 end
 
-local refresh_deps = function()
+--- Refresh the dependencies and call the callbacks
+---@param callbacks ?nvim_lens.ParseCallbacks: Table of callbacks
+local refresh_deps = function(callbacks)
   -- parse package.json buffer using parse_buffer
-  state.deps = parse_buffer(state.bufnr)
-  refresh_virtual_text(state.bufnr)
+  state.deps = parse_file(state.package_json_path)
+  if callbacks and callbacks.on_parse then
+    callbacks.on_parse(state.deps)
+  end
 
-  -- add version infos to dependencies table using `npm outdated`
-  vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
+  -- Notify checking dependencies only in package.json
+  local bufnr = vim.api.nvim_get_current_buf()
+  if not options.hide_notifications and vim.api.nvim_buf_get_name(bufnr) == state.package_json_path then
+    vim.notify("󱑢 Checking dependencies", vim.log.levels.INFO, { title = "NpmLens" })
+  end
   retrieve_npm_outdated(function(outdated)
     state.deps = parse_npm_outdated(state.deps, outdated)
-    vim.schedule(function()
-      refresh_virtual_text(state.bufnr)
-    end)
+    if callbacks and callbacks.on_complete then
+      callbacks.on_complete(state.deps)
+    end
   end)
 end
 
---- Init plugin state
----@return boolean: Whether the plugin has been initialized
-local init = function()
-  -- TODO: check if npm is installed
+--- Bootstrap plugin state. This function is idempotent
+---@param callbacks ?nvim_lens.ParseCallbacks
+---@return boolean: Whether the startup process has completed.
+local boot = function(callbacks)
+  if not state.startup_started then
+    state.startup_started = true
+    if not try_node_detect() then
+      return false
+    end
 
-  -- check if current curren file is package.json
-  if not is_npm_file() then
-    vim.notify("Not a package.json file", vim.log.levels.WARN, { title = "NpmLens" })
-    return false
-  end
-  if not state.startup_completed then
-    state.bufnr = vim.api.nvim_get_current_buf()
-    refresh_deps()
-    -- Indicate that the startup process has completed;
-    -- async tasks may still be running, but we have initiated them.
-    state.startup_completed = true
-  end
+    if not options.hide_notifications then
+      vim.notify("󱑢 Node detected", vim.log.levels.INFO, { title = "NpmLens" })
+    end
 
-  return true
+    refresh_deps(callbacks)
+  end
+  return state.startup_completed
 end
 
---- Toggle the virtual text
-M.toggle = function()
-  local firstTime = not state.startup_completed
-  -- The _init function is idempotent
-  if init() then
-    if firstTime then
-      return
-    end
-    if state.show then
-      remove_virtual_text(state.bufnr)
-      state.show = false
-    else
-      add_virtual_text(state.bufnr, state.deps)
-      state.show = true
-    end
+local parser_callbacks = {
+  on_complete = function()
+    state.startup_completed = true
+    vim.schedule(function()
+      -- on_complete we are sure that package_json_path is set
+      local bufnr = vim.api.nvim_get_current_buf()
+      if vim.api.nvim_buf_get_name(bufnr) == state.package_json_path then
+        refresh_virtual_text(bufnr)
+      end
+    end)
+  end,
+}
+
+--- Bootstraps the plugin,
+M._boot = function()
+  return boot(parser_callbacks)
+end
+
+M._sync_virtual_text = function()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if state.startup_completed and vim.api.nvim_buf_get_name(bufnr) == state.package_json_path then
+    refresh_virtual_text(bufnr)
   end
 end
 
 --- Refresh deps info
 M.refresh = function()
-  local firstTime = not state.startup_completed
-  if init() then
-    if not firstTime then
-      refresh_deps()
-    end
+  -- If the plugin is not started (e.g. lazy loaded), then boot
+  if not state.startup_started then
+    boot(parser_callbacks)
+    return
+  end
+
+  -- If the startup is already in progress, do nothing
+  if not state.startup_completed then
+    return
+  end
+
+  refresh_deps(parser_callbacks)
+end
+
+--- Toggle the virtual text, runs only if package.json is the open buffer
+M.toggle = function()
+  -- If the plugin is not started (e.g. lazy loaded), then boot
+  if not state.startup_started then
+    boot(parser_callbacks)
+    return
+  end
+
+  -- If the startup is already in progress, do nothing
+  if not state.startup_completed then
+    return
+  end
+
+  -- If the current buffer is not package.json, do nothing
+  local bufnr = vim.api.nvim_get_current_buf()
+  if vim.api.nvim_buf_get_name(bufnr) ~= state.package_json_path then
+    vim.notify("  Not in package.json", vim.log.levels.INFO, { title = "NpmLens" })
+    return
+  end
+
+  if state.show then
+    remove_virtual_text(bufnr)
+    state.show = false
+  else
+    add_virtual_text(bufnr, state.deps)
+    state.show = true
   end
 end
 

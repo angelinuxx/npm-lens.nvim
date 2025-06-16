@@ -45,6 +45,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
   -- you want to change because they will be merged with the default ones
   opts = {
     enabled = true, -- If false, info in `package.json` won't display until `:NpmLensToggle` is used
+    hide_notifications = false,
     status = {
       uptodate = {
         label = "󰄲",

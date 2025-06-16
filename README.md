@@ -94,14 +94,16 @@ Use the command `:NpmLensRefresh` to trigger a refresh of the dependencies info.
 #### 🧭 Roadmap
 
 - [x] Configurable highlight groups for each version state
-- [x] Make Available section (`Wanted` and `Latest`) labels and highlight group configurable
-- [x] Auto-load plugin only in Node.js projects (currently activates in `package.json` files only)
-- [ ] Add dependency audit feature and show vulnerable packages
-- [ ] Show vulnerability summary in a floating/split window
+- [x] Make the `Available` section labels (`Wanted` and `Latest`) and highlight group configurable
+- [x] Auto-load the plugin only in Node.js projects (currently activates in `package.json` files only)
+- [ ] Add a dependency audit feature and show vulnerable packages
+- [ ] Show a vulnerability summary in a floating/split window
 - [ ] Expose an API to get overall project dependency stats:
-
   - Total number of dependencies
   - Number of outdated packages
   - Number of vulnerable packages
+- [ ] Integrate with `lualine.nvim` to show dependency stats
 
-- [ ] Integration with `lualine.nvim` to show dependency stats
+##### Known issues
+
+- The current version may be wrong if the dependency is up to date because `npm outdated` doesn't return it. In this case, we show the semver without `^` or `*`. This will be fixed soon.
